@@ -1,0 +1,156 @@
+#!/bin/bash
+# ocelado-hello-helper: system changes requested by ocelado-hello.
+# Runs as root through pkexec (polkit action org.ocelado.hello.manage).
+# Every argument is validated here; nothing else can be run through it.
+#
+#   update                         transactional-update dup (new snapshot)
+#   rollback <snapshot>            boot that snapshot from the next reboot
+#   auto-updates on|off            transactional-update.timer
+#   boot-session last|gamemode|desktop
+#   next-kernel ogc|tkg            GRUB default kernel type from the next boot
+#   format-device <disk>           wipe a microSD/USB disk, one ext4 partition
+#   install-plugins <id>...        Decky plugins from the fixed list below
+set -euo pipefail
+export LC_ALL=C
+
+die() { echo "$*" >&2; exit 1; }
+
+[ "$(id -u)" = 0 ] || die "ocelado-hello-helper: debe ejecutarse como root (pkexec)"
+
+# User that asked for the action (pkexec sets PKEXEC_UID).
+user_uid="${PKEXEC_UID:-}"
+user_name=""
+user_home=""
+if [ -n "$user_uid" ]; then
+    user_name="$(getent passwd "$user_uid" | cut -d: -f1)"
+    user_home="$(getent passwd "$user_uid" | cut -d: -f6)"
+fi
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+update)
+    transactional-update --non-interactive dup
+    ;;
+
+rollback)
+    n="${1:-}"
+    [[ "$n" =~ ^[0-9]+$ ]] || die "Instantánea no válida"
+    snapper --no-dbus --csvout --no-headers list --columns number | grep -qx "$n" \
+        || die "La instantánea $n no existe"
+    transactional-update rollback "$n"
+    ;;
+
+auto-updates)
+    case "${1:-}" in
+        on)  systemctl enable --now transactional-update.timer ;;
+        off) systemctl disable --now transactional-update.timer ;;
+        *)   die "Valor no válido" ;;
+    esac
+    ;;
+
+boot-session)
+    mode="${1:-}"
+    case "$mode" in last|gamemode|desktop) ;; *) die "Modo de arranque no válido" ;; esac
+    # Read at boot by deckifier's steamos-startup-gamescope
+    conf=/etc/ogc-handheld/boot-session.conf
+    [ -e /etc/ocelado/boot-session.conf ] && conf=/etc/ocelado/boot-session.conf
+    mkdir -p "${conf%/*}"
+    printf '# Session at power-on: last, gamemode or desktop (set by ocelado-hello)\nBOOT_SESSION=%s\n' "$mode" > "$conf"
+    ;;
+
+next-kernel)
+    flavor="${1:-}"
+    case "$flavor" in ogc|tkg) ;; *) die "Kernel no válido" ;; esac
+    case "$flavor" in
+        ogc) ls /boot/vmlinuz-*-ogc >/dev/null 2>&1 || die "OGC no está instalado" ;;
+        tkg) ls /boot/vmlinuz-*-tkg* >/dev/null 2>&1 || die "linux-tkg no está instalado" ;;
+    esac
+    # ocelado-release keeps the newest kernel of the last booted type on top
+    # of the GRUB menu (GRUB_TOP_LEVEL) from this file.
+    mkdir -p /var/lib/ocelado
+    echo "$flavor" > /var/lib/ocelado/kernel-flavor
+    /usr/libexec/ocelado/grub-default || :
+    # grub.cfg lives in the read-only root: regenerate it in a new snapshot.
+    transactional-update --non-interactive grub.cfg
+    ;;
+
+format-device)
+    disk="${1:-}"
+    [[ "$disk" =~ ^/dev/(mmcblk[0-9]+|sd[a-z]+)$ ]] || die "Solo tarjetas microSD y discos USB"
+    [ -b "$disk" ] || die "No existe $disk"
+    name="${disk#/dev/}"
+    removable="$(cat "/sys/block/$name/removable" 2>/dev/null || echo 0)"
+    tran="$(lsblk -dno TRAN "$disk" 2>/dev/null | tr -d ' ')"
+    hotplug="$(lsblk -dno HOTPLUG "$disk" 2>/dev/null | tr -d ' ')"
+    if [[ "$name" != mmcblk* ]] && [ "$removable" != 1 ] && [ "$tran" != usb ] && [ "$hotplug" != 1 ]; then
+        die "$disk no parece extraíble"
+    fi
+    # Never touch a disk holding the system
+    while read -r mp; do
+        case "$mp" in
+            /|/var|/home|/boot|/boot/*|/usr|/etc|/.snapshots|\[SWAP\]) die "$disk está en uso por el sistema" ;;
+        esac
+    done < <(lsblk -lno MOUNTPOINTS "$disk" | sed '/^$/d')
+
+    # Unmount whatever is mounted from it
+    while read -r part; do
+        umount "$part" 2>/dev/null || :
+    done < <(lsblk -lnpo NAME "$disk" | tail -n +2)
+
+    wipefs -a "$disk"
+    parted -s "$disk" mklabel gpt mkpart juegos ext4 1MiB 100%
+    udevadm settle
+    case "$name" in mmcblk*|nvme*) part="${disk}p1" ;; *) part="${disk}1" ;; esac
+    for _ in 1 2 3 4 5; do [ -b "$part" ] && break; sleep 1; done
+    [ -b "$part" ] || die "No aparece la partición nueva"
+    # No reserved blocks: the whole card is for games
+    mkfs.ext4 -F -q -m 0 -L Juegos "$part"
+
+    # Make the new filesystem belong to the user
+    if [ -n "$user_uid" ]; then
+        tmp="$(mktemp -d)"
+        mount "$part" "$tmp"
+        chown "$user_uid:$(getent passwd "$user_uid" | cut -d: -f4)" "$tmp"
+        umount "$tmp"
+        rmdir "$tmp"
+    fi
+    udevadm settle
+    echo "$part"
+    ;;
+
+install-plugins)
+    [ -n "$user_home" ] || die "No se sabe para qué usuario instalar"
+    plugins_dir="$user_home/homebrew/plugins"
+    [ -d "$user_home/homebrew/services" ] || die "Decky Loader no está instalado"
+    mkdir -p "$plugins_dir"
+    for id in "$@"; do
+        case "$id" in
+            unifideck)
+                repo="mubaraknumann/unifideck"
+                folder="Unifideck"
+                ;;
+            *) die "Plugin desconocido: $id" ;;
+        esac
+        url="$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" \
+            | jq -r '[.assets[] | select(.name | endswith(".zip"))][0].browser_download_url')"
+        [ -n "$url" ] && [ "$url" != null ] || die "No se encontró la última versión de $id"
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        curl -fsSL -o "$work/plugin.zip" "$url"
+        unzip -q "$work/plugin.zip" -d "$work/x"
+        src="$(dirname "$(find "$work/x" -maxdepth 3 -name plugin.json | head -n1)")"
+        [ -f "$src/plugin.json" ] || die "El paquete de $id no es un plugin de Decky"
+        rm -rf "${plugins_dir:?}/$folder"
+        mv "$src" "$plugins_dir/$folder"
+        rm -rf "$work"
+        trap - EXIT
+    done
+    systemctl restart plugin_loader.service 2>/dev/null || :
+    ;;
+
+*)
+    die "Uso: $0 update|rollback|auto-updates|boot-session|next-kernel|format-device|install-plugins"
+    ;;
+esac

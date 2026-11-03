@@ -1,0 +1,31 @@
+[package]
+name = "ocelado-hello"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Welcome app for Ocelado Linux (desktop and handheld)"
+repository = "https://github.com/ocelado-linux/ocelado-hello"
+
+[dependencies]
+cxx = "1.0.205"
+cxx-qt = "0.10.0"
+cxx-qt-lib = { version = "0.10.0", features = ["qt_full"] }
+gilrs = { version = "0.11.2", optional = true }
+qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+toml = "1.1.8"
+ureq = "3.5.1"
+
+[build-dependencies]
+cxx-qt-build = "0.10.0"
+qt-build-utils = "0.10.0"
+
+[features]
+default = ["gamepad"]
+# Gamepad navigation through gilrs (needs libudev at runtime)
+gamepad = ["dep:gilrs"]
+
+[profile.release]
+lto = "thin"
+strip = true

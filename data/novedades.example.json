@@ -1,0 +1,15 @@
+{
+  "releases": [
+    {
+      "version": "0.4",
+      "title": "Novedades en Ocelado 0.4",
+      "url": "https://github.com/ocelado-linux",
+      "items": [
+        { "title": "Nuevo instalador", "text": "Eliges disco, particiones y usuario al instalar." },
+        { "title": "Navegador Growser incluido", "text": "Se actualiza junto al sistema." },
+        { "title": "Menú de arranque con el tema de Ocelado", "text": "Y recuerda el último kernel que usaste." },
+        { "title": "Esta app, ocelado-hello", "text": "Decky, discos, mandos y más en un solo sitio." }
+      ]
+    }
+  ]
+}
