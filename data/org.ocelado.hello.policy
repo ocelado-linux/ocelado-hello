@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>Ocelado Linux</vendor>
+  <vendor_url>https://github.com/ocelado-linux</vendor_url>
+  <icon_name>ocelado-logo</icon_name>
+
+  <action id="org.ocelado.hello.query">
+    <description>Read system snapshots</description>
+    <description xml:lang="es">Leer las instantáneas del sistema</description>
+    <message>Authentication is required to read the system snapshots</message>
+    <message xml:lang="es">Se necesita autenticación para leer las instantáneas del sistema</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/ocelado-hello/ocelado-hello-query</annotate>
+  </action>
+
+  <!-- Like SteamOS: the user at the device can update, roll back, change the
+       boot options, prepare a microSD and install the listed Decky plugins
+       without a password. Game Mode has no polkit agent to ask for one.
+       Change allow_active to auth_admin_keep to require the password. -->
+  <action id="org.ocelado.hello.manage">
+    <description>Update and configure Ocelado Linux</description>
+    <description xml:lang="es">Actualizar y configurar Ocelado Linux</description>
+    <message>Authentication is required to change the system</message>
+    <message xml:lang="es">Se necesita autenticación para cambiar el sistema</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/ocelado-hello/ocelado-hello-helper</annotate>
+  </action>
+</policyconfig>

@@ -1,0 +1,23 @@
+<services>
+  <!-- Sources from GitHub; the version comes from the latest tag (v0.1.0)
+       plus the commits since then -->
+  <service name="obs_scm" mode="manual">
+    <param name="url">https://github.com/ocelado-linux/ocelado-hello.git</param>
+    <param name="scm">git</param>
+    <param name="revision">main</param>
+    <param name="versionformat">@PARENT_TAG@+git@TAG_OFFSET@.%h</param>
+    <param name="versionrewrite-pattern">v(.*)</param>
+  </service>
+  <service name="set_version" mode="manual" />
+  <service name="tar" mode="buildtime" />
+  <service name="recompress" mode="buildtime">
+    <param name="file">*.tar</param>
+    <param name="compression">zst</param>
+  </service>
+  <!-- OBS builds without network: vendor the crates -->
+  <service name="cargo_vendor" mode="manual">
+    <param name="src">ocelado-hello</param>
+    <param name="compression">zst</param>
+    <param name="update">true</param>
+  </service>
+</services>

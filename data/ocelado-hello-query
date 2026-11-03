@@ -1,0 +1,17 @@
+#!/bin/bash
+# ocelado-hello-query: read-only information that needs root.
+# Runs through pkexec (polkit action org.ocelado.hello.query, no password).
+#
+#   snapshots     snapper list of the root config, as JSON
+set -euo pipefail
+export LC_ALL=C
+
+case "${1:-}" in
+snapshots)
+    exec snapper --no-dbus --jsonout list --columns number,date,description,active,default
+    ;;
+*)
+    echo "Uso: $0 snapshots" >&2
+    exit 1
+    ;;
+esac

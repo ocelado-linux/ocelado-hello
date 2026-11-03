@@ -1,0 +1,4 @@
+# CXX-Qt's Cargo-only builds do not link with GNU ld.bfd (see the CXX-Qt
+# README); use lld. On openSUSE: BuildRequires lld.
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Welcome to Ocelado
+Name[es]=Bienvenida a Ocelado
+GenericName=Welcome and system setup
+GenericName[es]=Bienvenida y ajustes del sistema
+Comment=Updates, kernel, storage, Decky, controllers and apps
+Comment[es]=Actualizaciones, kernel, discos, Decky, mandos y apps
+Exec=ocelado-hello
+Icon=ocelado-logo
+Terminal=false
+Categories=System;Settings;
+Keywords=welcome;hello;ocelado;decky;update;kernel;bienvenida;
+StartupNotify=true
