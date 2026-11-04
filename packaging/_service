@@ -1,23 +1,25 @@
 <services>
-  <!-- Sources from GitHub; the version comes from the latest tag (v0.1.0)
-       plus the commits since then -->
-  <service name="obs_scm" mode="manual">
+  <!-- Run on your machine before committing to OBS (OBS builds without
+       network):  osc service manualrun
+       Produces ocelado-hello-<version>.tar.zst, vendor.tar.zst and sets
+       Version in the spec from the latest tag (v0.1.0 → 0.1.0+git<n>.<hash>). -->
+  <service name="tar_scm" mode="manual">
     <param name="url">https://github.com/ocelado-linux/ocelado-hello.git</param>
     <param name="scm">git</param>
     <param name="revision">main</param>
     <param name="versionformat">@PARENT_TAG@+git@TAG_OFFSET@.%h</param>
     <param name="versionrewrite-pattern">v(.*)</param>
   </service>
-  <service name="set_version" mode="manual" />
-  <service name="tar" mode="buildtime" />
-  <service name="recompress" mode="buildtime">
+  <service name="recompress" mode="manual">
     <param name="file">*.tar</param>
     <param name="compression">zst</param>
   </service>
-  <!-- OBS builds without network: vendor the crates -->
+  <service name="set_version" mode="manual" />
+  <!-- update=false: keep the Cargo.lock of the repository, the spec builds
+       with it locked -->
   <service name="cargo_vendor" mode="manual">
     <param name="src">ocelado-hello</param>
     <param name="compression">zst</param>
-    <param name="update">true</param>
+    <param name="update">false</param>
   </service>
 </services>
