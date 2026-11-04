@@ -96,7 +96,21 @@ not link with GNU ld.bfd.
 
 openSUSE packaging (OBS) is in [`packaging/`](packaging): the spec and a
 `_service` that takes the sources from this repository and vendors the
-crates.
+crates (OBS builds without network).
+
+### Publishing to OBS
+
+The [`Publish to OBS`](.github/workflows/obs.yml) workflow does it from
+GitHub, in an openSUSE container:
+
+- **Push a tag** (`git tag v0.2.0 && git push origin v0.2.0`): that version
+  goes to `home:Luthenis:ogc-handheld/ocelado-hello`.
+- **Actions → Publish to OBS → Run workflow**: sends the current `main`.
+
+It needs the `OBS_USER` and `OBS_PASSWORD` secrets (repository or
+organization). It creates the OBS package the first time, runs the source
+services (`osc service manualrun`) and commits the spec, the source tarball
+and `vendor.tar.zst`.
 
 ### Development
 

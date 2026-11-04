@@ -1,0 +1,85 @@
+name: Publish to OBS
+
+# A new tag (v0.2.0…) sends that version to OBS. "Run workflow" sends the
+# current main (version 0.1.0+git<n>.<hash>), useful for testing builds.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+jobs:
+  obs:
+    runs-on: ubuntu-latest
+    # The OBS source services (tar_scm, cargo_vendor…) are only packaged
+    # for openSUSE.
+    container: registry.opensuse.org/opensuse/tumbleweed:latest
+    timeout-minutes: 30
+    env:
+      OBS_PROJECT: home:Luthenis:ogc-handheld
+      OBS_PACKAGE: ocelado-hello
+      OBS_API: https://api.opensuse.org
+    steps:
+      - name: Install osc and the source services
+        run: |
+          zypper --non-interactive --gpg-auto-import-keys refresh
+          zypper --non-interactive install --no-recommends \
+            git tar zstd gzip cargo osc \
+            obs-service-tar_scm obs-service-recompress \
+            obs-service-set_version obs-service-cargo_vendor
+
+      # Full history and tags: the version comes from the latest tag
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure osc credentials
+        env:
+          OBS_USER: ${{ secrets.OBS_USER }}
+          OBS_PASSWORD: ${{ secrets.OBS_PASSWORD }}
+        run: |
+          mkdir -p ~/.config/osc
+          cat > ~/.config/osc/oscrc <<OSCRC
+          [general]
+          apiurl = ${OBS_API}
+          [${OBS_API}]
+          user = ${OBS_USER}
+          pass = ${OBS_PASSWORD}
+          credentials_mgr_class = osc.credentials.PlaintextConfigFileCredentialsManager
+          OSCRC
+          chmod 600 ~/.config/osc/oscrc
+
+      - name: Create the OBS package if it does not exist
+        run: |
+          if ! osc meta pkg "$OBS_PROJECT" "$OBS_PACKAGE" >/dev/null 2>&1; then
+            cat > /tmp/meta.xml <<META
+          <package name="${OBS_PACKAGE}" project="${OBS_PROJECT}">
+            <title>ocelado-hello: welcome app for Ocelado Linux</title>
+            <description>Welcome app for Ocelado Linux (desktop and handheld): updates and snapshots, kernel and boot session, microSD for games, Decky, controllers, apps and bug reports. Sources: https://github.com/ocelado-linux/ocelado-hello</description>
+          </package>
+          META
+            osc meta pkg "$OBS_PROJECT" "$OBS_PACKAGE" -F /tmp/meta.xml
+          fi
+
+      - name: Run the source services and commit to OBS
+        run: |
+          osc checkout "$OBS_PROJECT" "$OBS_PACKAGE" -o obs
+          cd obs
+          cp ../packaging/ocelado-hello.spec ../packaging/_service .
+          # The repository is private: tar_scm takes the sources from this
+          # checkout instead of cloning GitHub
+          git config --global --add safe.directory '*'
+          sed -i "s|<param name=\"url\">[^<]*</param>|<param name=\"url\">file://${GITHUB_WORKSPACE}</param>|" _service
+          # Build exactly the pushed tag; main when started by hand
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            sed -i "s|<param name=\"revision\">main</param>|<param name=\"revision\">${GITHUB_REF_NAME}</param>|" _service
+          fi
+          cat _service
+          # Drop the tarballs of the previous version
+          rm -f ./*.tar.zst ./*.tar ./*.obscpio ./*.obsinfo
+          osc service manualrun
+          # Keep the GitHub URL in OBS for whoever runs the services by hand
+          sed -i "s|<param name=\"url\">[^<]*</param>|<param name=\"url\">https://github.com/ocelado-linux/ocelado-hello.git</param>|" _service
+          ls -l
+          osc addremove
+          osc status
+          osc commit -m "ocelado-hello $(sed -n 's/^Version: *//p' ocelado-hello.spec) (${GITHUB_REF_NAME}, ${GITHUB_SHA::7})"
