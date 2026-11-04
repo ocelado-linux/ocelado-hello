@@ -51,20 +51,14 @@ controllers, recommended apps and bug reports. It has a desktop layout
 and a handheld layout driven by a controller.
 
 %prep
+# vendor.tar.zst (cargo_vendor) brings the crates and its own
+# .cargo/config.toml pointing cargo to them
 %autosetup -a1 -p1
-# Crates from vendor.tar.zst (OBS builds without network)
-cat >> .cargo/config.toml <<'EOF'
-
-[source.crates-io]
-replace-with = "vendored-sources"
-
-[source.vendored-sources]
-directory = "vendor"
-EOF
 
 %build
 export QMAKE=%{_bindir}/qmake6
-# RUSTFLAGS replaces the rustflags of .cargo/config.toml: keep lld here too
+# CXX-Qt cargo builds do not link with GNU ld.bfd: lld through RUSTFLAGS
+# (vendor.tar.zst brings its own .cargo/config.toml)
 export RUSTFLAGS="%{build_rustflags} -C link-arg=-fuse-ld=lld"
 cargo build --offline --release --locked
 
