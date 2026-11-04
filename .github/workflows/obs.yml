@@ -61,24 +61,28 @@ jobs:
           fi
 
       - name: Run the source services and commit to OBS
+        env:
+          # The repository is private: tar_scm clones it with the job's
+          # read-only token (tar_scm only accepts http/git/ssh URLs)
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           osc checkout "$OBS_PROJECT" "$OBS_PACKAGE" -o obs
           cd obs
           cp ../packaging/ocelado-hello.spec ../packaging/_service .
-          # The repository is private: tar_scm takes the sources from this
-          # checkout instead of cloning GitHub
-          git config --global --add safe.directory '*'
-          sed -i "s|<param name=\"url\">[^<]*</param>|<param name=\"url\">file://${GITHUB_WORKSPACE}</param>|" _service
+          sed -i "s|<param name=\"url\">[^<]*</param>|<param name=\"url\">https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git</param>|" _service
           # Build exactly the pushed tag; main when started by hand
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             sed -i "s|<param name=\"revision\">main</param>|<param name=\"revision\">${GITHUB_REF_NAME}</param>|" _service
           fi
-          cat _service
           # Drop the tarballs of the previous version
           rm -f ./*.tar.zst ./*.tar ./*.obscpio ./*.obsinfo
           osc service manualrun
-          # Keep the GitHub URL in OBS for whoever runs the services by hand
+          # Back to the public URL, and never send the token to OBS
           sed -i "s|<param name=\"url\">[^<]*</param>|<param name=\"url\">https://github.com/ocelado-linux/ocelado-hello.git</param>|" _service
+          if grep -rlF "$GITHUB_TOKEN" --exclude-dir=.osc . ; then
+            echo "The token ended up in the files above; not committing" >&2
+            exit 1
+          fi
           ls -l
           osc addremove
           osc status
