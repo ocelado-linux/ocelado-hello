@@ -13,6 +13,9 @@ Flickable {
     default property alias content: column.data
     /// Extra button hints for the handheld bar: [{ key: "Y", text: "Instalar" }]
     property var hints: []
+    /// The page takes every controller button (button test): the bar shows
+    /// only `hints`, and Main.qml neither navigates nor changes section.
+    property bool exclusive: false
 
     signal navigate(string pageId)
     /// Asks Main.qml to show the confirmation dialog; `callback` runs on OK.

@@ -52,7 +52,7 @@ PageBase {
                     spacing: 10
                     Layout.topMargin: 6
                     OButton {
-                        visible: Backend.gameModeEdition && !Backend.inGameMode
+                        visible: Backend.gameModeEdition
                         kind: "primary"
                         text: "Volver al Modo Juego"
                         onClicked: Backend.switchToGameMode()
@@ -128,6 +128,6 @@ PageBase {
         InfoTile { Layout.fillWidth: true; label: "Base"; value: "openSUSE Tumbleweed (inmutable)" }
         InfoTile { Layout.fillWidth: true; label: "Kernel en uso"; value: page.kernelName + " · " + Backend.kernelRelease }
         InfoTile { Layout.fillWidth: true; label: "Dispositivo"; value: Backend.deviceName }
-        InfoTile { Layout.fillWidth: true; label: "Sesión"; value: Backend.inGameMode ? "Modo Juego" : "Escritorio" }
+        InfoTile { Layout.fillWidth: true; label: "Procesador"; value: Backend.cpuLevel > 0 ? "x86-64-v" + Backend.cpuLevel : "—" }
     }
 }

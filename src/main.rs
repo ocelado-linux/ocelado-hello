@@ -51,6 +51,12 @@ fn main() {
         }
     }
 
+    // Ocelado Hello only runs on the desktop (Plasma): never at the start of
+    // a Game Mode (gamescope) session.
+    if autostart && system::in_game_mode() {
+        return;
+    }
+
     if autostart {
         let cfg = config::Config::load();
         let version = system::OsRelease::load().version();
@@ -65,7 +71,13 @@ fn main() {
         }
     }
 
-    let handheld = force_handheld.unwrap_or_else(system::in_game_mode);
+    // Handheld layout (controller, full screen) on the editions with Game
+    // Mode, also in Desktop Mode; desktop layout on Desktop editions.
+    let handheld = force_handheld.unwrap_or_else(|| {
+        system::in_game_mode()
+            || system::Edition::detect(&system::OsRelease::load(), &system::Device::load())
+                .has_game_mode()
+    });
     let _ = bridge::START.set(bridge::StartOptions { handheld, start_page: page, show_news });
 
     // Our controls draw their own look; the Basic style keeps popups and
@@ -81,6 +93,7 @@ fn main() {
         app.as_mut().set_organization_name(&QString::from("ocelado-linux"));
     }
     bridge::qobject::set_desktop_file_name(&QString::from("ocelado-hello"));
+    bridge::qobject::install_pad_key_filter();
     let mut engine = QQmlApplicationEngine::new();
     if let Some(engine) = engine.as_mut() {
         engine.load(&QUrl::from("qrc:/qt/qml/org/ocelado/hello/qml/Main.qml"));

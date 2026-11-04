@@ -9,6 +9,7 @@
 #   boot-session last|gamemode|desktop
 #   next-kernel ogc|tkg            GRUB default kernel type from the next boot
 #   format-device <disk>           wipe a microSD/USB disk, one ext4 partition
+#   install-decky                  install or update Decky Loader
 #   install-plugins <id>...        Decky plugins from the fixed list below
 set -euo pipefail
 export LC_ALL=C
@@ -120,37 +121,76 @@ format-device)
     echo "$part"
     ;;
 
+install-decky)
+    # Official installer (decky-installer). It expects to be run with sudo:
+    # give it the user through SUDO_USER.
+    [ -n "$user_name" ] || die "No se sabe para qué usuario instalar"
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
+    curl -fsSL -o "$work/install_release.sh" \
+        https://github.com/SteamDeckHomebrew/decky-installer/releases/latest/download/install_release.sh
+    SUDO_USER="$user_name" bash "$work/install_release.sh" </dev/null
+    # The installer only "starts" the service: on an update the old version
+    # would keep running until the next reboot.
+    systemctl restart plugin_loader.service
+    ;;
+
 install-plugins)
     [ -n "$user_home" ] || die "No se sabe para qué usuario instalar"
     plugins_dir="$user_home/homebrew/plugins"
     [ -d "$user_home/homebrew/services" ] || die "Decky Loader no está instalado"
+    user_group="$(getent passwd "$user_uid" | cut -d: -f4)"
     mkdir -p "$plugins_dir"
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
+    store=""
     for id in "$@"; do
+        # Fixed list: store name in the Decky store, or a GitHub repository
         case "$id" in
-            unifideck)
-                repo="mubaraknumann/unifideck"
-                folder="Unifideck"
-                ;;
+            unifideck)       repo="mubaraknumann/unifideck"; name="" ;;
+            css-loader)      repo=""; name="CSS Loader" ;;
+            steamgriddb)     repo=""; name="SteamGridDB" ;;
+            protondb-badges) repo=""; name="ProtonDB Badges" ;;
             *) die "Plugin desconocido: $id" ;;
         esac
-        url="$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" \
-            | jq -r '[.assets[] | select(.name | endswith(".zip"))][0].browser_download_url')"
-        [ -n "$url" ] && [ "$url" != null ] || die "No se encontró la última versión de $id"
-        work="$(mktemp -d)"
-        trap 'rm -rf "$work"' EXIT
-        curl -fsSL -o "$work/plugin.zip" "$url"
+        rm -rf "$work/x" "$work/plugin.zip"
+        if [ -n "$repo" ]; then
+            url="$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" \
+                | jq -r '[.assets[] | select(.name | endswith(".zip"))][0].browser_download_url')"
+            [ -n "$url" ] && [ "$url" != null ] || die "No se encontró la última versión de $id"
+            curl -fsSL -o "$work/plugin.zip" "$url"
+        else
+            # Same as Decky's store: newest version first, artifact URL or
+            # the CDN by hash, and the zip must match the hash
+            [ -n "$store" ] || store="$(curl -fsSL https://plugins.deckbrew.xyz/plugins)"
+            ver="$(jq -c --arg n "$name" \
+                '[.[] | select((.name | ascii_downcase) == ($n | ascii_downcase))][0].versions[0] // empty' <<<"$store")"
+            [ -n "$ver" ] || die "$name no está en la tienda de Decky"
+            hash="$(jq -r '.hash' <<<"$ver")"
+            url="$(jq -r '.artifact // empty' <<<"$ver")"
+            [ -n "$url" ] || url="https://cdn.tzatzikiweeb.moe/file/steam-deck-homebrew/versions/$hash.zip"
+            curl -fsSL -o "$work/plugin.zip" "$url"
+            [ "$(sha256sum "$work/plugin.zip" | cut -d' ' -f1)" = "$hash" ] \
+                || die "La descarga de $name no coincide con la tienda"
+        fi
         unzip -q "$work/plugin.zip" -d "$work/x"
-        src="$(dirname "$(find "$work/x" -maxdepth 3 -name plugin.json | head -n1)")"
-        [ -f "$src/plugin.json" ] || die "El paquete de $id no es un plugin de Decky"
+        pj="$(find "$work/x" -maxdepth 3 -name plugin.json | head -n1)"
+        [ -n "$pj" ] || die "El paquete de $id no es un plugin de Decky"
+        src="$(dirname "$pj")"
+        folder="$(basename "$src")"
+        [ "$src" != "$work/x" ] || folder="$id"
         rm -rf "${plugins_dir:?}/$folder"
         mv "$src" "$plugins_dir/$folder"
-        rm -rf "$work"
-        trap - EXIT
+        # Permissions as Decky sets them: the folder belongs to the user,
+        # the folder itself and plugin.json to root
+        chown -R "$user_uid:$user_group" "$plugins_dir/$folder"
+        chown root:root "$plugins_dir/$folder" "$plugins_dir/$folder/plugin.json"
+        chmod 755 "$plugins_dir/$folder" "$plugins_dir/$folder/plugin.json"
     done
     systemctl restart plugin_loader.service 2>/dev/null || :
     ;;
 
 *)
-    die "Uso: $0 update|rollback|auto-updates|boot-session|next-kernel|format-device|install-plugins"
+    die "Uso: $0 update|rollback|auto-updates|boot-session|next-kernel|format-device|install-decky|install-plugins"
     ;;
 esac

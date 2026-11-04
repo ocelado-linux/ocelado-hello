@@ -7,6 +7,8 @@ import org.ocelado.hello
 Rectangle {
     id: bar
     property var hints: []
+    /// Only the page's hints (the page takes every button)
+    property bool exclusive: false
     property bool wizard: false
 
     implicitHeight: 60
@@ -51,7 +53,7 @@ Rectangle {
         anchors.rightMargin: 36
         spacing: 28
         Item { Layout.fillWidth: true }
-        Hint { key: "A"; label: "Seleccionar" }
+        Hint { visible: !bar.exclusive; key: "A"; label: "Seleccionar" }
         Repeater {
             model: bar.hints
             delegate: Hint {
@@ -60,7 +62,7 @@ Rectangle {
                 label: modelData.text
             }
         }
-        Hint { key: "B"; label: bar.wizard ? "Paso anterior" : "Atrás" }
-        Hint { visible: !bar.wizard; key: "L1 R1"; label: "Sección" }
+        Hint { visible: !bar.exclusive; key: "B"; label: bar.wizard ? "Paso anterior" : "Atrás" }
+        Hint { visible: !bar.wizard && !bar.exclusive; key: "L1 R1"; label: "Sección" }
     }
 }

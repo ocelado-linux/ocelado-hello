@@ -19,10 +19,12 @@ PageBase {
         if (i >= 0) s.splice(i, 1); else s.push(id)
         selected = s
     }
-    // Selected plugins that can be installed and are not installed yet.
+    // Selected plugins not installed yet.
     readonly property var toInstall: plugins.filter(function (p) {
-        return p.installable && !p.installed && page.isSelected(p.id)
+        return !p.installed && page.isSelected(p.id)
     }).map(function (p) { return p.id })
+    readonly property bool updateAvailable: Backend.deckyInstalled && Backend.deckyLatest !== ""
+                                            && Backend.deckyVersion !== Backend.deckyLatest
 
     function install() {
         if (Backend.deckyInstalled && toInstall.length > 0)
@@ -61,24 +63,33 @@ PageBase {
                         font.weight: Font.DemiBold
                     }
                     Badge {
-                        text: Backend.deckyInstalled ? "Instalado" : "No instalado"
+                        text: !Backend.deckyInstalled ? "No instalado"
+                            : Backend.deckyVersion !== "" ? "Instalado · " + Backend.deckyVersion : "Instalado"
                         tone: Backend.deckyInstalled ? "green" : "neutral"
+                    }
+                    Badge {
+                        visible: Backend.deckyInstalled && !page.updateAvailable && Backend.deckyLatest !== ""
+                        text: "Al día"
+                        tone: "green"
                     }
                 }
                 Label {
                     Layout.fillWidth: true
-                    text: Backend.inGameMode
-                          ? "Se instala desde el Modo Escritorio, con su instalador oficial."
-                          : "Se abre el instalador oficial en un terminal. Al terminar, vuelve al Modo Juego."
+                    text: !Backend.deckyInstalled ? "Con su instalador oficial."
+                        : Backend.deckyLatest === "" ? "No se pudo comprobar si hay versión nueva."
+                        : page.updateAvailable ? "Hay una versión nueva: " + Backend.deckyLatest + "."
+                        : "Tienes la última versión."
                     color: Theme.textMuted
                     font.pixelSize: Theme.fontSmall
                     wrapMode: Text.WordWrap
                 }
             }
             OButton {
-                visible: !Backend.inGameMode
-                kind: Backend.deckyInstalled ? "secondary" : "primary"
-                text: Backend.deckyInstalled ? "Actualizar Decky" : "Instalar Decky Loader"
+                visible: !Backend.deckyInstalled || page.updateAvailable || Backend.deckyLatest === ""
+                kind: page.updateAvailable || !Backend.deckyInstalled ? "primary" : "secondary"
+                enabled: !Backend.busy
+                text: !Backend.deckyInstalled ? "Instalar Decky Loader"
+                    : page.updateAvailable ? "Actualizar a " + Backend.deckyLatest : "Reinstalar"
                 onClicked: Backend.installDecky()
             }
         }
@@ -94,19 +105,19 @@ PageBase {
             text: modelData.name
             subtitle: modelData.description + (modelData.note !== "" ? "\n" + modelData.note : "")
             letter: modelData.name.charAt(0)
-            tint: modelData.installable ? Theme.blue : "#c7b6f0"
+            tint: modelData.id === "unifideck" ? Theme.blue : "#c7b6f0"
             badge: modelData.installed ? "Instalado" : modelData.source
-            badgeTone: modelData.installed ? "green" : (modelData.installable ? "blue" : "neutral")
-            trailing: modelData.installable && !modelData.installed ? "switch" : "none"
+            badgeTone: modelData.installed ? "green" : (modelData.id === "unifideck" ? "blue" : "neutral")
+            trailing: modelData.installed ? "none" : "switch"
             on: page.isSelected(modelData.id)
-            enabled: modelData.installable && !modelData.installed
+            enabled: !modelData.installed && Backend.deckyInstalled
             onClicked: page.toggle(modelData.id)
         }
     }
 
     Label {
         Layout.fillWidth: true
-        text: "Los de la tienda de Decky se instalan desde el propio Decky, en el menú de acceso rápido."
+        text: "Se instalan desde aquí y aparecen en el menú de acceso rápido (···) del Modo Juego."
         color: Theme.textFaint
         font.pixelSize: Theme.fontSmall
         wrapMode: Text.WordWrap

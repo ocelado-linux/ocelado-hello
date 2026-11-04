@@ -2,9 +2,10 @@
 Type=Application
 Name=Welcome to Ocelado
 Name[es]=Bienvenida a Ocelado
-Comment=Opens at login according to its "open at login" setting
+Comment=Opens when entering the desktop, according to its "open at login" setting
 Exec=ocelado-hello --autostart
 Icon=ocelado-logo
 Terminal=false
 NoDisplay=true
+OnlyShowIn=KDE;
 X-KDE-autostart-phase=2

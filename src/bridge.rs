@@ -23,6 +23,14 @@ pub mod qobject {
         /// Wayland app_id and window icon; must match the .desktop file.
         #[rust_name = "set_desktop_file_name"]
         fn setDesktopFileName(name: &QString);
+        /// Drops navigation keys that duplicate a gamepad press (Steam's
+        /// desktop controller layout turns the d-pad and A/B into keys).
+        #[rust_name = "install_pad_key_filter"]
+        fn installPadKeyFilter();
+        /// False when a navigation key arrived just before: same press.
+        /// Thread-safe, called from the gamepad thread.
+        #[rust_name = "gamepad_event_allowed"]
+        fn gamepadEventAllowed() -> bool;
     }
 
     // QML sees camelCase names: news_available → newsAvailable
@@ -63,6 +71,8 @@ pub mod qobject {
         #[qproperty(QString, sensors_json)]
         // Decky and apps
         #[qproperty(bool, decky_installed)]
+        #[qproperty(QString, decky_version)]
+        #[qproperty(QString, decky_latest)]
         #[qproperty(QString, plugins_json)]
         #[qproperty(QString, apps_json)]
         // News
@@ -75,6 +85,9 @@ pub mod qobject {
         // Development: save a screenshot here after start-up and quit
         // (OCELADO_HELLO_SCREENSHOT=/path/shot.png).
         #[qproperty(QString, screenshot_path)]
+        // Development: gamepad actions to replay before the screenshot
+        // (OCELADO_HELLO_NAV=down,down,right).
+        #[qproperty(QString, dev_nav)]
         type Backend = super::BackendRust;
 
         /// Reloads Decky, plugin, app, kernel and disk states.
@@ -144,6 +157,9 @@ pub mod qobject {
         /// Any gamepad button pressed, by name ("A", "L1"…), for the test.
         #[qsignal]
         fn button_event(self: Pin<&mut Backend>, name: QString);
+        /// Released, for the test (holding B ends it).
+        #[qsignal]
+        fn button_released(self: Pin<&mut Backend>, name: QString);
         /// A long action finished.
         #[qsignal]
         fn action_done(self: Pin<&mut Backend>, ok: bool, message: QString);
@@ -191,6 +207,8 @@ pub struct BackendRust {
     disks_json: QString,
     sensors_json: QString,
     decky_installed: bool,
+    decky_version: QString,
+    decky_latest: QString,
     plugins_json: QString,
     apps_json: QString,
     news_available: bool,
@@ -199,6 +217,7 @@ pub struct BackendRust {
     report_url: QString,
     report_qr: QString,
     screenshot_path: QString,
+    dev_nav: QString,
 
     config: config::Config,
 }
@@ -249,6 +268,9 @@ impl cxx_qt::Initialize for qobject::Backend {
         if let Ok(path) = std::env::var("OCELADO_HELLO_SCREENSHOT") {
             self.as_mut().set_screenshot_path(qs(path));
         }
+        if let Ok(nav) = std::env::var("OCELADO_HELLO_NAV") {
+            self.as_mut().set_dev_nav(qs(nav));
+        }
 
         self.as_mut().refresh();
         if start.show_news {
@@ -257,9 +279,15 @@ impl cxx_qt::Initialize for qobject::Backend {
 
         let thread = self.qt_thread();
         gamepad::spawn(move |event| {
+            if let gamepad::Event::Nav(_) = event {
+                if !qobject::gamepad_event_allowed() {
+                    return;
+                }
+            }
             let _ = thread.queue(move |obj| match event {
                 gamepad::Event::Nav(action) => obj.gamepad(QString::from(action)),
                 gamepad::Event::Button(name) => obj.button_event(QString::from(name)),
+                gamepad::Event::Release(name) => obj.button_released(QString::from(name)),
             });
         });
     }
@@ -300,6 +328,7 @@ impl qobject::Backend {
 
     pub fn refresh(mut self: Pin<&mut Self>) {
         self.as_mut().set_decky_installed(decky::is_installed());
+        self.as_mut().set_decky_version(qs(decky::installed_version()));
         self.as_mut().set_plugins_json(to_json(&decky::plugin_states()));
         self.as_mut().set_boot_session(qs(boot::boot_session()));
         self.as_mut().set_kernels_json(to_json(&boot::installed_kernels()));
@@ -312,12 +341,14 @@ impl qobject::Backend {
                     to_json_string(&apps::app_states()),
                     to_json_string(&storage::disks()),
                     updates::auto_updates_enabled(),
+                    decky::latest_version().unwrap_or_default(),
                 )
             },
-            |mut obj, (apps, disks, auto)| {
+            |mut obj, (apps, disks, auto, decky_latest)| {
                 obj.as_mut().set_apps_json(qs(apps));
                 obj.as_mut().set_disks_json(qs(disks));
                 obj.as_mut().set_auto_updates(auto);
+                obj.as_mut().set_decky_latest(qs(decky_latest));
             },
         );
     }
@@ -491,16 +522,22 @@ impl qobject::Backend {
 
     // ---- Decky and apps ----
 
-    pub fn install_decky(mut self: Pin<&mut Self>) {
-        if *self.in_game_mode() {
-            self.action_done(
-                false,
-                qs("Decky se instala desde el Modo Escritorio: allí se abre un terminal con el instalador oficial."),
-            );
-            return;
-        }
-        let result = decky::install_loader_in_terminal();
-        self.as_mut().finish(result, "Instalador de Decky abierto en Konsole. Al terminar, vuelve al Modo Juego.");
+    pub fn install_decky(self: Pin<&mut Self>) {
+        let updating = *self.decky_installed();
+        self.spawn_task(
+            if updating { "Actualizando Decky Loader…" } else { "Instalando Decky Loader…" },
+            decky::install_loader,
+            move |mut obj, result| {
+                obj.as_mut().refresh();
+                let version = obj.decky_version().to_string();
+                let message = match (updating, version.is_empty()) {
+                    (true, false) => format!("Decky actualizado a {version}."),
+                    (true, true) => "Decky actualizado.".to_string(),
+                    (false, _) => "Decky instalado. Aparece en el menú de acceso rápido (···) del Modo Juego.".to_string(),
+                };
+                obj.finish(result, &message);
+            },
+        );
     }
 
     pub fn install_plugins(self: Pin<&mut Self>, ids_json: &QString) {
