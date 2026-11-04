@@ -14,6 +14,9 @@ jobs:
     # for openSUSE.
     container: registry.opensuse.org/opensuse/tumbleweed:latest
     timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
     env:
       OBS_PROJECT: home:Luthenis:ogc-handheld
       OBS_PACKAGE: ocelado-hello
@@ -77,6 +80,8 @@ jobs:
           # Drop the tarballs of the previous version
           rm -f ./*.tar.zst ./*.tar ./*.obscpio ./*.obsinfo
           osc service manualrun
+          # tar_scm leaves its git clone here (with the token in .git/config)
+          rm -rf ./ocelado-hello/
           # Back to the public URL, and never send the token to OBS
           sed -i "s|<param name=\"url\">[^<]*</param>|<param name=\"url\">https://github.com/ocelado-linux/ocelado-hello.git</param>|" _service
           if grep -rlF "$GITHUB_TOKEN" --exclude-dir=.osc . ; then
