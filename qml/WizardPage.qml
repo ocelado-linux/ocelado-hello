@@ -162,10 +162,10 @@ PageBase {
                 visible: page.step === "Decky"
                 Layout.fillWidth: true
                 text: Backend.deckyInstalled ? "Decky ya está instalado" : "Instalar Decky Loader"
-                subtitle: Backend.inGameMode ? "Se instala desde el Modo Escritorio" : "Se abre su instalador oficial en un terminal"
+                subtitle: "Con su instalador oficial"
                 iconPath: Icons.decky
                 tint: Theme.blue
-                enabled: !Backend.deckyInstalled && !Backend.inGameMode
+                enabled: !Backend.deckyInstalled && !Backend.busy
                 badge: Backend.deckyInstalled ? "Instalado" : ""
                 badgeTone: "green"
                 onClicked: Backend.installDecky()
@@ -236,7 +236,7 @@ PageBase {
                     id: primary
                     kind: "primary"
                     text: page.step === "Bienvenida" ? "Empezar"
-                        : page.step === "Listo" ? (Backend.gameModeEdition && !Backend.inGameMode ? "Terminar" : "Empezar a usar Ocelado")
+                        : page.step === "Listo" ? "Empezar a usar Ocelado"
                         : page.step === "Apps" && page.apps.length > 0 ? "Instalar y seguir"
                         : "Siguiente"
                     onClicked: {

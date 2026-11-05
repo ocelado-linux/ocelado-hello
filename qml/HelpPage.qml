@@ -144,7 +144,6 @@ PageBase {
                         onClicked: Qt.openUrlExternally(Backend.reportUrl)
                     }
                     OButton {
-                        visible: !Backend.inGameMode
                         text: "Abrir carpeta"
                         iconPath: Icons.folder
                         onClicked: Qt.openUrlExternally("file://" + Backend.reportPath.substring(0, Backend.reportPath.lastIndexOf("/")))
